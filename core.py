@@ -1,27 +1,29 @@
-from data import db
 from telebot import types
-import time
 
 def start_text(has_key, is_group=False, bot_username=""):
     if not has_key:
         if is_group:
             return (
-                "<b>Bridges AI — Group Setup.</b>\n"
-                "A seamless bridge between human thought and intelligence.\n\n"
-                "To interact in groups, please connect your Gemini API key privately.\n\n"
-                f"👉 <a href='https://t.me/{bot_username}?start=key'>Connect API Key in Private</a>"
+                "<b>Bridges AI — Group Setup</b>\n\n"
+                "To interact with the intelligence in group discussions, "
+                "please connect your personal Gemini API key privately.\n\n"
+                f"→ <a href='https://t.me/{bot_username}?start=key'>Connect Key in Private</a>"
             )
         return (
-            "<b>Bridges AI.</b>\n"
-            "A seamless bridge between human thought and intelligence.\n\n"
-            "To begin, connect your personal Gemini API key.\n"
-            "You can get one in seconds right here:\n"
-            "https://aistudio.google.com/app/apikey\n\n"
-            "Simply send the key in your next message."
+            "<b>Bridges AI</b>\n"
+            "<i>A seamless bridge between human thought and intelligence.</i>\n\n"
+            "No middlemen. No data selling. Unthrottled access directly from Google.\n\n"
+            "To ignite the engine, connect your personal Gemini key:\n"
+            "→ <b><a href='https://aistudio.google.com/app/apikey'>Get your free API key in 10 seconds</a></b>\n\n"
+            "Simply paste the key in your next message."
         )
     return (
-        "<b>Bridges AI.</b>\n"
-        "The system is ready. What are we creating today?"
+        "<b>Bridges AI — Ready.</b>\n\n"
+        "The bridge is open. You can interact with the intelligence anywhere:\n"
+        "• <b>Direct:</b> Send any thought or question right here\n"
+        "• <b>Groups:</b> Use <code>/ai &lt;prompt&gt;</code> in team chats\n"
+        f"• <b>Everywhere:</b> Type <code>@{bot_username} &lt;query&gt;</code> in any conversation\n\n"
+        "<i>What are we creating today?</i>"
     )
 
 def group_no_key_text(bot_username, user_name):
@@ -100,7 +102,7 @@ def status_text(days_left, is_active, is_lifetime=False, is_admin=False):
         return "<b>Bridges AI:</b> Lifetime access active ♾️"
     if is_active:
         return f"<b>Bridges AI:</b> {days_left} days of access remaining."
-    return "<b>Bridges AI:</b> Your access period has expired. Use /donate to renew."
+    return "<b>Bridges AI:</b> Your access period has expired. Use /sub to renew."
 
 def admin_stats_text(total_users, active_subs, db_size_str):
     return (

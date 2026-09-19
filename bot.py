@@ -13,10 +13,12 @@ import re
 import os
 
 
-bot = telebot.TeleBot(TOKEN)
+bot = telebot.TeleBot(TOKEN, threaded=True, num_threads=20)
 
 flood_cache = TTLCache(maxsize=10000, ttl=1.0)
 flood_lock = threading.Lock()
+
+BOT_USERNAME = bot.get_me().username
 
 def is_flooding(uid):
     with flood_lock:
@@ -30,8 +32,15 @@ def markdown_to_html(text):
     if not text:
         return ""
     text = html.escape(text)
-    text = re.sub(r"```(?:[a-zA-Z0-9_-]+)?\n?(.*?)```", r"<pre>\1</pre>", text, flags=re.DOTALL)
-    text = re.sub(r"`([^`\n]+)`", r"<code>\1</code>", text)
+    code_blocks = []
+    def save_pre(m):
+        code_blocks.append(f"<pre>{m.group(1)}</pre>")
+        return f"%%%CODE_BLOCK_{len(code_blocks)-1}%%%"
+    def save_code(m):
+        code_blocks.append(f"<code>{m.group(1)}</code>")
+        return f"%%%CODE_BLOCK_{len(code_blocks)-1}%%%"
+    text = re.sub(r"```(?:[a-zA-Z0-9_-]+)?\n?(.*?)```", save_pre, text, flags=re.DOTALL)
+    text = re.sub(r"`([^`\n]+)`", save_code, text)
     text = re.sub(r"!\[([^\]]*)\]\((https?://[^\s)]+)\)", r'<a href="\2">🖼 \1</a>', text)
     text = re.sub(r"\[([^\]]+)\]\((https?://[^\s)]+)\)", r'<a href="\2">\1</a>', text)
     text = re.sub(r"^\s*[-*_]{3,}\s*$", r"—" * 15, text, flags=re.MULTILINE)
@@ -42,6 +51,8 @@ def markdown_to_html(text):
     text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
     text = re.sub(r"^[\*\-]\s+(.+)$", r"• \1", text, flags=re.MULTILINE)
     text = re.sub(r"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)", r"<i>\1</i>", text)
+    for idx, block in enumerate(code_blocks):
+        text = text.replace(f"%%%CODE_BLOCK_{idx}%%%", block)
 
     return text
 
@@ -68,7 +79,7 @@ def start_handler(message):
     db.add_user(uid)
     is_group = message.chat.type != 'private'
     has_key = db.get_api_key(uid) is not None
-    bot_username = bot.get_me().username
+    bot_username = BOT_USERNAME
     text = core.start_text(has_key, is_group=is_group, bot_username=bot_username)
     bot.send_message(chat_id, text, parse_mode="HTML")
 
@@ -118,13 +129,15 @@ def group_ai_handler(message):
     text = parts[1].strip()
     key = db.get_api_key(uid)
     if not key:
-        bot_username = bot.get_me().username
+        bot_username = BOT_USERNAME
         name = message.from_user.first_name or "there"
+        name = html.escape(message.from_user.first_name or "there")
         bot.send_message(chat_id, core.group_no_key_text(bot_username, name), parse_mode="HTML")
         return
     if not db.is_pro(uid):
-        bot_username = bot.get_me().username
+        bot_username = BOT_USERNAME
         name = message.from_user.first_name or "there"
+        name = html.escape(message.from_user.first_name or "there")
         bot.send_message(chat_id, core.group_no_pro_text(bot_username, name), parse_mode="HTML")
         return
     bot.send_chat_action(chat_id, "typing")
@@ -193,6 +206,52 @@ def admin_stats_handler(message):
     bot.send_message(chat_id, core.admin_stats_text(total_users, active_subs, db_size_str), parse_mode="HTML")
 
 
+@bot.message_handler(commands=['get', 'give'])
+def give_days_handler(message):
+    uid = message.from_user.id
+    chat_id = message.chat.id
+    if uid != ADMIN_ID:
+        return
+    parts = message.text.split()
+    if len(parts) != 3:
+        bot.send_message(
+            chat_id, 
+            "<b>Format:</b> <code>/get &lt;uid&gt; &lt;days&gt;</code>\nExample: <code>/get 123456789 30</code>", 
+            parse_mode="HTML"
+        )
+        return
+    try:
+        target_uid = int(parts[1])
+        days = int(parts[2])
+    except ValueError:
+        bot.send_message(chat_id, "Error: UID and days must be valid integers.")
+        return
+    if days <= 0:
+        bot.send_message(chat_id, "Error: Days count must be greater than zero.")
+        return
+    db.add_pro_days(target_uid, days=days)
+    new_expiry = db.get_pro_expiry(target_uid)
+    date_str = time.strftime("%b %d, %Y", time.localtime(new_expiry))
+    bot.send_message(
+        chat_id,
+        f"<b>Access Granted.</b>\n"
+        f"• <b>User ID:</b> <code>{target_uid}</code>\n"
+        f"• <b>Added:</b> {days} days\n"
+        f"• <b>Active until:</b> {date_str}",
+        parse_mode="HTML"
+    )
+    try:
+        bot.send_message(
+            target_uid,
+            f"<b>Bridges AI — Access Extended.</b>\n"
+            f"Your access has been extended by <b>{days}</b> days.\n"
+            f"Active until: <b>{date_str}</b>",
+            parse_mode="HTML"
+        )
+    except Exception:
+        pass
+
+
 @bot.callback_query_handler(func=lambda call: call.data.startswith("buy_sub:"))
 def send_sub_invoice(call):
     uid = call.from_user.id
@@ -249,7 +308,7 @@ def got_payment(message):
         db.add_pro_days(uid, days=90)
         plan_name = "3 Months (90 Days)"
     elif payload == "sub_lifetime":
-        db.add_pro_days(uid, days=36500) # 100 лет
+        db.add_pro_days(uid, days=36500)
         plan_name = "Lifetime Access"
     else:
         db.add_pro_days(uid, days=30)
@@ -299,7 +358,7 @@ def inline_query_handler(query):
         return
     if len(user_text) < 3:
         return
-    bot_username = bot.get_me().username
+    bot_username = BOT_USERNAME
     key = db.get_api_key(uid)
     if not key:
         no_key_article = types.InlineQueryResultArticle(

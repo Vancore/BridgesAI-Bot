@@ -16,9 +16,10 @@ class Database:
         self.conn = sqlite3.connect(db_name, check_same_thread=False)
         self.conn.execute("PRAGMA journal_mode=WAL;")
         self.conn.execute("PRAGMA busy_timeout=5000;")
-        self.lock = threading.Lock() 
+        self.lock = threading.RLock()
         self.cipher = Fernet(encryption_key)
         self.create_tables()
+
 
     #create
     @connection_lock
@@ -41,6 +42,7 @@ class Database:
     #key management
     @connection_lock
     def set_api_key(self, uid, key):
+        self.add_user(uid)
         encrypted_key = self.cipher.encrypt(key.encode()).decode()
         with self.conn:
             self.conn.execute("""INSERT INTO users (user_id, api_key) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET api_key = excluded.api_key""", (uid, encrypted_key))
@@ -65,9 +67,10 @@ class Database:
 
     #history
     @connection_lock
-    def add_message(self, uid, role, content):
+    def add_message(self, uid, role, content, max_keep=40):
         with self.conn:
             self.conn.execute("INSERT INTO history (user_id, role, content) VALUES (?, ?, ?)",(uid, role, content))
+            self.conn.execute("""DELETE FROM history WHERE user_id = ? AND id NOT IN (SELECT id FROM history WHERE user_id = ? ORDER BY id DESC LIMIT ?)""", (uid, uid, max_keep))
 
     @connection_lock
     def get_history(self, uid, limit=20):
@@ -107,7 +110,7 @@ class Database:
         else:
             new_until = now + seconds_to_add
         with self.conn:
-            self.conn.execute("UPDATE users SET pro_until = ? WHERE user_id = ?", (new_until, uid))
+            self.conn.execute("""INSERT INTO users (user_id, pro_until) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET pro_until = excluded.pro_until""", (uid, new_until))
 
     @connection_lock
     def get_pro_expiry(self, uid):
