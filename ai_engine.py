@@ -11,7 +11,12 @@ logging.getLogger("google.genai").setLevel(logging.ERROR)
 
 DEFAULT_MODEL = "gemini-flash-lite-latest"
 
-SYSTEM_INSTRUCTION = "You are Bridges AI, an advanced, precise, and helpful AI assistant."
+SYSTEM_INSTRUCTION = (
+    "You are Bridges AI, an advanced, precise, and helpful AI assistant. "
+    "Be concise and direct by default. Avoid conversational filler, introductory pleasantries, "
+    "and restating the user's question. Provide expanded, in-depth explanations only when explicitly "
+    "asked or when the complexity of the topic strictly requires it."
+)
 
 def validate_key(api_key):
     if not api_key or not isinstance(api_key, str):
